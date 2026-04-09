@@ -1,95 +1,7 @@
-<!DOCTYPE html>
-<html lang="ro">
-<head>
-<meta charset="UTF-8">
-<title>Semnal + FFT corect</title>
-
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/fft.js@0.3.0/dist/fft.min.js"></script>
-
-<style>
-body {
-  background: #0b0b0b;
-  color: #00ff88;
-  font-family: monospace;
-  text-align: center;
-}
-
-canvas {
-  background: #111;
-  margin: 10px;
-}
-</style>
-</head>
-
-<body>
-
-<h2>Semnal în timp + FFT (corect)</h2>
-
-<canvas id="timeChart"></canvas>
-<canvas id="fftChart"></canvas>
-
 <script>
-// ---------------- FIREBASE ----------------
-const firebaseConfig = {
-  databaseURL: "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/"
-};
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-// ---------------- CHARTS ----------------
-const timeChart = new Chart(document.getElementById("timeChart"), {
-  type: "line",
-  data: {
-    labels: [],
-    datasets: [{
-      label: "Semnal",
-      data: [],
-      borderColor: "lime",
-      pointRadius: 0
-    }]
-  },
-  options: {
-    animation: false,
-    scales: {
-      x: { display: false }
-    }
-  }
-});
-
-const fftChart = new Chart(document.getElementById("fftChart"), {
-  type: "line",
-  data: {
-    labels: [],
-    datasets: [{
-      label: "FFT",
-      data: [],
-      borderColor: "red",
-      pointRadius: 0
-    }]
-  },
-  options: {
-    animation: false,
-    scales: {
-      x: { display: true, title: { display: true, text: "Hz" } }
-    }
-  }
-});
-
-// ---------------- FFT SETUP ----------------
+// N MUST be power of 2
 const N = 512;
 
-// fft.js global
-const fft = new fftjs.FFT(N);
-
-const input = new Array(N).fill(0);
-const out = fft.createComplexArray();
-
-// ---------------- REALTIME DATA ----------------
 db.ref("stup_01/latest_data").on("value", snap => {
   const data = snap.val();
   if (!data || !data.buffer) return;
@@ -97,38 +9,39 @@ db.ref("stup_01/latest_data").on("value", snap => {
   const y = data.buffer;
   const Fs = data.fs || 1000;
 
-  // ---------------- TIME SIGNAL (ZOOM FIX) ----------------
-  const viewSize = Math.min(200, y.length); // aici e “zoom-ul” real
-  const sliced = y.slice(y.length - viewSize);
+  // -------- TIME (zoom) --------
+  const viewSize = Math.min(200, y.length);
 
-  timeChart.data.labels = sliced.map((_, i) => i);
-  timeChart.data.datasets[0].data = sliced;
+  timeChart.data.labels = y.slice(-viewSize).map((_, i) => i);
+  timeChart.data.datasets[0].data = y.slice(-viewSize);
   timeChart.update();
 
-  // ---------------- PREP FFT ----------------
-  input.fill(0);
+  // -------- FFT SETUP (FIX REAL) --------
+  const f = new fftjs.FFT(N);
 
-  for (let i = 0; i < Math.min(N, y.length); i++) {
+  const input = new Array(N).fill(0);
+
+  for (let i = 0; i < N; i++) {
     input[i] = y[y.length - N + i] || 0;
   }
 
-  const complexInput = fft.createComplexArray();
-  const complexOutput = fft.createComplexArray();
+  const out = f.createComplexArray();
+  const dataArr = f.createComplexArray();
 
   for (let i = 0; i < N; i++) {
-    complexInput[2 * i] = input[i];
-    complexInput[2 * i + 1] = 0;
+    dataArr[2 * i] = input[i];
+    dataArr[2 * i + 1] = 0;
   }
 
-  fft.transform(complexOutput, complexInput);
+  f.transform(out, dataArr);
 
-  // ---------------- MAGNITUDE ----------------
+  // -------- MAGNITUDE --------
   const mags = [];
   const labels = [];
 
   for (let k = 0; k < N / 2; k++) {
-    const re = complexOutput[2 * k];
-    const im = complexOutput[2 * k + 1];
+    const re = out[2 * k];
+    const im = out[2 * k + 1];
 
     const mag = Math.sqrt(re * re + im * im);
 
@@ -141,6 +54,3 @@ db.ref("stup_01/latest_data").on("value", snap => {
   fftChart.update();
 });
 </script>
-
-</body>
-</html>
