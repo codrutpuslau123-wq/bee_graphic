@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitorizare Stup Live</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; text-align: center; }
+        #stream { width: 100%; max-width: 500px; border: 2px solid #333; margin-top: 20px; }
+        .info { margin: 10px; font-size: 0.8em; color: #888; }
+    </style>
+</head>
+<body>
+    <h2>LIVE: Analiză Acustică Stup</h2>
+    <div class="info" id="time">Aștept semnal din MATLAB...</div>
+    <img id="stream" src="" alt="Live Stream MATLAB">
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            databaseURL: "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Ascultăm nodul live_view
+        db.ref("stup_01/live_view").on("value", (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                document.getElementById('stream').src = data.live_stream;
+                const date = new Date(data.timestamp);
+                document.getElementById('time').innerText = "Ultimul cadru: " + date.toLocaleTimeString();
+            }
+        });
+    </script>
+</body>
+</html>
