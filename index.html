@@ -1,148 +1,144 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-<meta charset="UTF-8" />
-<title>Live Signal + FFT FIX</title>
+<meta charset="UTF-8">
+<title>Semnal + FFT corect</title>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/fft.js/dist/fft.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/fft.js@0.3.0/dist/fft.min.js"></script>
 
 <style>
 body {
-    background: black;
-    color: #0f0;
-    font-family: monospace;
-    text-align: center;
+  background: #0b0b0b;
+  color: #00ff88;
+  font-family: monospace;
+  text-align: center;
 }
+
 canvas {
-    background: #111;
-    margin: 10px;
+  background: #111;
+  margin: 10px;
 }
 </style>
 </head>
 
 <body>
 
-<h2>Live Signal + FFT (FIXED)</h2>
+<h2>Semnal în timp + FFT (corect)</h2>
 
 <canvas id="timeChart"></canvas>
 <canvas id="fftChart"></canvas>
 
 <script>
 // ---------------- FIREBASE ----------------
-firebase.initializeApp({
-    databaseURL: "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/"
-});
+const firebaseConfig = {
+  databaseURL: "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/"
+};
 
+firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ---------------- CONFIG ----------------
-const MAX_POINTS = 256;
-
-// ---------------- CHART TIME ----------------
+// ---------------- CHARTS ----------------
 const timeChart = new Chart(document.getElementById("timeChart"), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: "Semnal",
-            data: [],
-            borderColor: "lime",
-            pointRadius: 0
-        }]
-    },
-    options: {
-        animation: false,
-        scales: {
-            x: { display: false },
-            y: { min: -2, max: 2 }
-        }
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [{
+      label: "Semnal",
+      data: [],
+      borderColor: "lime",
+      pointRadius: 0
+    }]
+  },
+  options: {
+    animation: false,
+    scales: {
+      x: { display: false }
     }
+  }
 });
 
-// ---------------- CHART FFT ----------------
 const fftChart = new Chart(document.getElementById("fftChart"), {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: "Spectru FFT",
-            data: [],
-            borderColor: "red",
-            pointRadius: 0
-        }]
-    },
-    options: {
-        animation: false,
-        scales: {
-            x: { display: false }
-        }
+  type: "line",
+  data: {
+    labels: [],
+    datasets: [{
+      label: "FFT",
+      data: [],
+      borderColor: "red",
+      pointRadius: 0
+    }]
+  },
+  options: {
+    animation: false,
+    scales: {
+      x: { display: true, title: { display: true, text: "Hz" } }
     }
+  }
 });
 
-// ---------------- HANN WINDOW ----------------
-function hann(x) {
-    const N = x.length;
-    return x.map((v, i) =>
-        v * (0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1))))
-    );
-}
+// ---------------- FFT SETUP ----------------
+const N = 512;
 
-// ---------------- FFT REAL ----------------
-function computeFFT(signal) {
-    const N = signal.length;
+// fft.js global
+const fft = new fftjs.FFT(N);
 
-    const fft = new FFT(N);
-    const input = fft.createComplexArray();
-    const output = fft.createComplexArray();
+const input = new Array(N).fill(0);
+const out = fft.createComplexArray();
 
-    for (let i = 0; i < N; i++) {
-        input[2*i] = signal[i];
-        input[2*i + 1] = 0;
-    }
-
-    fft.transform(output, input);
-
-    const mag = [];
-    for (let i = 0; i < N/2; i++) {
-        const re = output[2*i];
-        const im = output[2*i+1];
-        mag.push(Math.sqrt(re*re + im*im) / N);
-    }
-
-    return mag;
-}
-
-// ---------------- UPDATE ----------------
+// ---------------- REALTIME DATA ----------------
 db.ref("stup_01/latest_data").on("value", snap => {
+  const data = snap.val();
+  if (!data || !data.buffer) return;
 
-    const data = snap.val();
-    if (!data || !Array.isArray(data.buffer)) return;
+  const y = data.buffer;
+  const Fs = data.fs || 1000;
 
-    let y = data.buffer;
+  // ---------------- TIME SIGNAL (ZOOM FIX) ----------------
+  const viewSize = Math.min(200, y.length); // aici e “zoom-ul” real
+  const sliced = y.slice(y.length - viewSize);
 
-    // zoom control
-    if (y.length > MAX_POINTS) {
-        y = y.slice(y.length - MAX_POINTS);
-    }
+  timeChart.data.labels = sliced.map((_, i) => i);
+  timeChart.data.datasets[0].data = sliced;
+  timeChart.update();
 
-    // ---------------- TIME DOMAIN ----------------
-    timeChart.data.labels = y.map((_, i) => i);
-    timeChart.data.datasets[0].data = y;
-    timeChart.update('none');
+  // ---------------- PREP FFT ----------------
+  input.fill(0);
 
-    // ---------------- FFT ----------------
-    const windowed = hann(y);
-    let spectrum = computeFFT(windowed);
+  for (let i = 0; i < Math.min(N, y.length); i++) {
+    input[i] = y[y.length - N + i] || 0;
+  }
 
-    spectrum = spectrum.slice(0, spectrum.length / 2);
+  const complexInput = fft.createComplexArray();
+  const complexOutput = fft.createComplexArray();
 
-    fftChart.data.labels = spectrum.map((_, i) => i);
-    fftChart.data.datasets[0].data = spectrum;
-    fftChart.update('none');
+  for (let i = 0; i < N; i++) {
+    complexInput[2 * i] = input[i];
+    complexInput[2 * i + 1] = 0;
+  }
+
+  fft.transform(complexOutput, complexInput);
+
+  // ---------------- MAGNITUDE ----------------
+  const mags = [];
+  const labels = [];
+
+  for (let k = 0; k < N / 2; k++) {
+    const re = complexOutput[2 * k];
+    const im = complexOutput[2 * k + 1];
+
+    const mag = Math.sqrt(re * re + im * im);
+
+    mags.push(mag);
+    labels.push((k * Fs / N).toFixed(1));
+  }
+
+  fftChart.data.labels = labels;
+  fftChart.data.datasets[0].data = mags;
+  fftChart.update();
 });
 </script>
 
