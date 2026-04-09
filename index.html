@@ -1,135 +1,86 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Bee Monitor Live</title>
-
+<title>Live Signal</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-    body {
-        background: black;
-        color: lime;
-        font-family: monospace;
-        text-align: center;
-    }
-
-    .container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 30px;
-    }
-
-    canvas {
-        background: #111;
-        border: 1px solid #333;
-    }
-</style>
 </head>
 
-<body>
+<body style="background:black;color:lime;text-align:center;">
 
-<h2>LIVE Bee Signal Analyzer</h2>
-<div id="status">waiting for data...</div>
+<h2>Live Signal + Spectrum</h2>
 
-<div class="container">
-
-    <div>
-        <h3>Time Domain</h3>
-        <canvas id="timeChart" width="700" height="250"></canvas>
-    </div>
-
-    <div>
-        <h3>Frequency Domain</h3>
-        <canvas id="freqChart" width="700" height="250"></canvas>
-    </div>
-
-</div>
+<canvas id="time" width="600" height="250"></canvas>
+<canvas id="freq" width="600" height="250"></canvas>
 
 <script>
+
 const url = "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/stup_01/latest_data.json";
 
-// ---------------- TIME CHART ----------------
-const timeCtx = document.getElementById("timeChart").getContext("2d");
-
-const timeChart = new Chart(timeCtx, {
+// CHART TIME
+const ctx1 = document.getElementById("time").getContext("2d");
+const timeChart = new Chart(ctx1, {
     type: "line",
-    data: {
-        labels: [],
-        datasets: [{
-            label: "Signal",
-            data: [],
-            borderColor: "lime",
-            pointRadius: 0,
-            borderWidth: 1
-        }]
-    },
+    data: { datasets: [{ data: [], borderColor: "lime", pointRadius: 0 }] },
+    options: { animation: false }
+});
+
+// CHART FREQ
+const ctx2 = document.getElementById("freq").getContext("2d");
+const freqChart = new Chart(ctx2, {
+    type: "line",
+    data: { datasets: [{ data: [], borderColor: "cyan", pointRadius: 0 }] },
     options: {
         animation: false,
         scales: {
-            x: { display: false },
-            y: { display: true }
+            x: { type: 'linear' }
         }
     }
 });
 
-// ---------------- FREQ CHART ----------------
-const freqCtx = document.getElementById("freqChart").getContext("2d");
+function fft(signal) {
+    const N = signal.length;
+    let real = new Array(N).fill(0);
+    let imag = new Array(N).fill(0);
 
-const freqChart = new Chart(freqCtx, {
-    type: "line",
-    data: {
-        labels: [],
-        datasets: [{
-            label: "Spectrum",
-            data: [],
-            borderColor: "cyan",
-            pointRadius: 0,
-            borderWidth: 1
-        }]
-    },
-    options: {
-        animation: false,
-        scales: {
-            x: { title: { display: true, text: "Frequency (Hz)" } },
-            y: { title: { display: true, text: "Magnitude" } }
+    // FFT super simplificat (magnitude only)
+    for (let k = 0; k < N/2; k++) {
+        let re = 0, im = 0;
+
+        for (let n = 0; n < N; n++) {
+            let angle = -2 * Math.PI * k * n / N;
+            re += signal[n] * Math.cos(angle);
+            im += signal[n] * Math.sin(angle);
         }
+
+        real[k] = Math.sqrt(re*re + im*im);
     }
-});
 
-// ---------------- UPDATE FUNCTION ----------------
-async function update() {
-    try {
-        const res = await fetch(url);
-        const data = await res.json();
-
-        if (!data) return;
-
-        document.getElementById("status").innerText =
-            "Last update: " + new Date(data.timestamp).toLocaleTimeString();
-
-        // TIME DOMAIN
-        if (data.buffer) {
-            timeChart.data.labels = data.buffer.map((_, i) => i);
-            timeChart.data.datasets[0].data = data.buffer;
-            timeChart.update();
-        }
-
-        // FREQUENCY DOMAIN
-        if (data.spectrum && data.freq) {
-            freqChart.data.labels = data.freq;
-            freqChart.data.datasets[0].data = data.spectrum;
-            freqChart.update();
-        }
-
-    } catch (e) {
-        console.log("Error:", e);
-    }
+    return real.slice(0, N/2);
 }
 
-// refresh loop
+async function update() {
+    const res = await fetch(url);
+    const data = await res.json();
+
+    if (!data || !data.buffer) return;
+
+    const y = data.buffer;
+
+    // TIME DOMAIN
+    timeChart.data.datasets[0].data = y.map((v,i)=>({x:i,y:v}));
+
+    // FFT IN BROWSER
+    const spec = fft(y);
+
+    freqChart.data.datasets[0].data = spec.map((v,i)=>({x:i,y:v}));
+
+    timeChart.update();
+    freqChart.update();
+}
+
 setInterval(update, 300);
+
 </script>
 
 </body>
