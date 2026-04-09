@@ -15,6 +15,7 @@ body {
     font-family: monospace;
     text-align: center;
 }
+
 canvas {
     background: #111;
     margin: 10px;
@@ -24,7 +25,7 @@ canvas {
 
 <body>
 
-<h2>Live semnal + FFT</h2>
+<h2>Live semnal + FFT (ZOOM)</h2>
 
 <canvas id="timeChart"></canvas>
 <canvas id="fftChart"></canvas>
@@ -37,13 +38,13 @@ firebase.initializeApp({
 
 const db = firebase.database();
 
-// ---------------- CHART SETUP ----------------
+// ---------------- CHART: TIME ----------------
 const timeChart = new Chart(document.getElementById("timeChart"), {
     type: 'line',
     data: {
         labels: [],
         datasets: [{
-            label: "Semnal timp",
+            label: "Semnal (zoom)",
             data: [],
             borderColor: "lime",
             pointRadius: 0
@@ -55,12 +56,13 @@ const timeChart = new Chart(document.getElementById("timeChart"), {
     }
 });
 
+// ---------------- CHART: FFT ----------------
 const fftChart = new Chart(document.getElementById("fftChart"), {
     type: 'line',
     data: {
         labels: [],
         datasets: [{
-            label: "Spectru FFT",
+            label: "FFT",
             data: [],
             borderColor: "red",
             pointRadius: 0
@@ -89,8 +91,8 @@ function fft(signal) {
     return re.map((r, i) => Math.sqrt(r*r + im[i]*im[i]) / N);
 }
 
-// ---------------- CONSTANTE ----------------
-const MAX_POINTS = 200;
+// ---------------- CONFIG ----------------
+const MAX_POINTS = 80; // 🔥 ZOOM (mai mic = mai zoom)
 
 // ---------------- UPDATE ----------------
 db.ref("stup_01/latest_data").on("value", snap => {
@@ -100,9 +102,9 @@ db.ref("stup_01/latest_data").on("value", snap => {
 
     let y = data.buffer;
 
-    // =====================
-    // TIME DOMAIN FIX
-    // =====================
+    // =========================
+    // ZOOM PE SEMNAL
+    // =========================
     if (y.length > MAX_POINTS) {
         y = y.slice(y.length - MAX_POINTS);
     }
@@ -111,9 +113,9 @@ db.ref("stup_01/latest_data").on("value", snap => {
     timeChart.data.datasets[0].data = y;
     timeChart.update('none');
 
-    // =====================
-    // FFT FIX
-    // =====================
+    // =========================
+    // FFT STABIL
+    // =========================
     const spectrum = fft(y);
     const half = spectrum.slice(0, Math.floor(spectrum.length / 2));
 
