@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <title>Live Bee Signal</title>
+
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -30,18 +31,14 @@ canvas {
 
 <script>
 // ---------------- FIREBASE ----------------
-const firebaseConfig = {
+firebase.initializeApp({
     databaseURL: "https://bee-monitoring-de66b-default-rtdb.europe-west1.firebasedatabase.app/"
-};
+});
 
-firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-// ---------------- CHARTS ----------------
-const timeCtx = document.getElementById("timeChart");
-const fftCtx = document.getElementById("fftChart");
-
-const timeChart = new Chart(timeCtx, {
+// ---------------- CHART SETUP ----------------
+const timeChart = new Chart(document.getElementById("timeChart"), {
     type: 'line',
     data: {
         labels: [],
@@ -53,11 +50,12 @@ const timeChart = new Chart(timeCtx, {
         }]
     },
     options: {
-        animation: false
+        animation: false,
+        responsive: true
     }
 });
 
-const fftChart = new Chart(fftCtx, {
+const fftChart = new Chart(document.getElementById("fftChart"), {
     type: 'line',
     data: {
         labels: [],
@@ -69,11 +67,12 @@ const fftChart = new Chart(fftCtx, {
         }]
     },
     options: {
-        animation: false
+        animation: false,
+        responsive: true
     }
 });
 
-// ---------------- FFT simplu ----------------
+// ---------------- FFT ----------------
 function fft(signal) {
     const N = signal.length;
     let re = new Array(N).fill(0);
@@ -87,27 +86,40 @@ function fft(signal) {
         }
     }
 
-    return re.map((r, i) => Math.sqrt(r*r + im[i]*im[i]));
+    return re.map((r, i) => Math.sqrt(r*r + im[i]*im[i]) / N);
 }
 
-// ---------------- FIREBASE LISTENER ----------------
+// ---------------- CONSTANTE ----------------
+const MAX_POINTS = 200;
+
+// ---------------- UPDATE ----------------
 db.ref("stup_01/latest_data").on("value", snap => {
+
     const data = snap.val();
     if (!data || !Array.isArray(data.buffer)) return;
 
-    const y = data.buffer;
+    let y = data.buffer;
 
-    // TIME DOMAIN
+    // =====================
+    // TIME DOMAIN FIX
+    // =====================
+    if (y.length > MAX_POINTS) {
+        y = y.slice(y.length - MAX_POINTS);
+    }
+
     timeChart.data.labels = y.map((_, i) => i);
     timeChart.data.datasets[0].data = y;
-    timeChart.update();
+    timeChart.update('none');
 
-    // FFT
+    // =====================
+    // FFT FIX
+    // =====================
     const spectrum = fft(y);
+    const half = spectrum.slice(0, Math.floor(spectrum.length / 2));
 
-    fftChart.data.labels = spectrum.map((_, i) => i);
-    fftChart.data.datasets[0].data = spectrum;
-    fftChart.update();
+    fftChart.data.labels = half.map((_, i) => i);
+    fftChart.data.datasets[0].data = half;
+    fftChart.update('none');
 });
 </script>
 
